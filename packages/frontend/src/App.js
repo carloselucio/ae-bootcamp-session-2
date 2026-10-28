@@ -1,120 +1,144 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
+import FilterToolbar from './components/FilterToolbar';
+import ProgressBar from './components/ProgressBar';
+import TaskForm from './components/TaskForm';
+import TaskRow from './components/TaskRow';
+import { useTaskFilters } from './hooks/useTaskFilters';
+import { filterTasks, sortTasks } from './utils/taskUtils';
+
 function App() {
-  const [data, setData] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newItem, setNewItem] = useState('');
+  const { filters, updateFilter } = useTaskFilters();
 
   useEffect(() => {
-    fetchData();
+    fetchTasks();
   }, []);
 
-  const fetchData = async () => {
+  const fetchTasks = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/items');
+      const response = await fetch('/api/tasks');
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
       const result = await response.json();
-      setData(result);
+      setTasks(result);
       setError(null);
     } catch (err) {
-      setError('Failed to fetch data: ' + err.message);
-      console.error('Error fetching data:', err);
+      setError('Failed to fetch tasks: ' + err.message);
+      console.error('Error fetching tasks:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!newItem.trim()) return;
-
+  const handleCreate = async (newTask) => {
     try {
-      const response = await fetch('/api/items', {
+      const response = await fetch('/api/tasks', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: newItem }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTask),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add item');
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to add task');
       }
 
       const result = await response.json();
-      setData([...data, result]);
-      setNewItem('');
+      setTasks((prev) => [result, ...prev]);
+      setError(null);
     } catch (err) {
-      setError('Error adding item: ' + err.message);
-      console.error('Error adding item:', err);
+      setError('Error adding task: ' + err.message);
+      console.error('Error adding task:', err);
     }
   };
 
-  const handleDelete = async (itemId) => {
+  const updateTask = async (id, updates) => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
+      const response = await fetch(`/api/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to update task');
+      }
+
+      const result = await response.json();
+      setTasks((prev) => prev.map((task) => (task.id === id ? result : task)));
+      setError(null);
+    } catch (err) {
+      setError('Error updating task: ' + err.message);
+      console.error('Error updating task:', err);
+    }
+  };
+
+  const handleToggleComplete = (id, completed) => updateTask(id, { completed });
+  const handleEdit = (id, updates) => updateTask(id, updates);
+
+  const handleDelete = async (taskId) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete item');
+        throw new Error('Failed to delete task');
       }
 
-      setData(data.filter(item => item.id !== itemId));
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
       setError(null);
     } catch (err) {
-      setError('Error deleting item: ' + err.message);
-      console.error('Error deleting item:', err);
+      setError('Error deleting task: ' + err.message);
+      console.error('Error deleting task:', err);
     }
   };
+
+  const visibleTasks = useMemo(() => {
+    const filtered = filterTasks(tasks, filters);
+    return sortTasks(filtered, filters.sortBy);
+  }, [tasks, filters]);
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>To Do App</h1>
+        <h1>To Do</h1>
         <p>Keep track of your tasks</p>
       </header>
 
       <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
-            />
-            <button type="submit">Add Item</button>
-          </form>
+        <section className="add-task-section">
+          <TaskForm onSubmit={handleCreate} submitLabel="Add Task" />
         </section>
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
+        <section className="task-list-section">
+          <ProgressBar tasks={tasks} />
+          <FilterToolbar filters={filters} onChange={updateFilter} />
+
+          {loading && <p>Loading tasks...</p>}
           {error && <p className="error">{error}</p>}
+
           {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </li>
+            <ul className="task-list">
+              {visibleTasks.length > 0 ? (
+                visibleTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    onToggleComplete={handleToggleComplete}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
                 ))
               ) : (
-                <p>No items found. Add some!</p>
+                <p className="empty-state">No tasks match the current filters.</p>
               )}
             </ul>
           )}
