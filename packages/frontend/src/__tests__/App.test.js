@@ -78,7 +78,7 @@ describe('App Component', () => {
     expect(screen.getByText('Keep track of your tasks')).toBeInTheDocument();
   });
 
-  test('loads and displays tasks', async () => {
+  test('loads and displays the tasks', async () => {
     await act(async () => {
       render(<App />);
     });
