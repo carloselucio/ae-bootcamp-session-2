@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "nodemon src/index.js",
-    "test": "jest --detectOpenHandles --testPathIgnorePatterns=/node_modules/,__tests__/integration",
+    "test": "jest --detectOpenHandles --testPathIgnorePatterns=/node_modules/ --testPathIgnorePatterns=__tests__/integration/",
     "test:integration": "jest --detectOpenHandles __tests__/integration"
   },
   "dependencies": {
